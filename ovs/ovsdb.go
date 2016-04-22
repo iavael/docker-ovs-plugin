@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	localhost    = "127.0.0.1"
-	ovsdbPort    = 6640
 	contextKey   = "container_id"
 	contextValue = "container_data"
 	minMTU       = 68
@@ -121,17 +119,19 @@ func (ovsdber *ovsdber) monitorBridges() {
 		select {
 		case currUpdate := <-update:
 			for table, tableUpdate := range currUpdate.Updates {
-				if table == "Bridge" {
-					for _, row := range tableUpdate.Rows {
-						empty := libovsdb.Row{}
-						if !reflect.DeepEqual(row.New, empty) {
-							oldRow := row.Old
-							if _, ok := oldRow.Fields["name"]; ok {
-								name := oldRow.Fields["name"].(string)
-								ovsdber.createOvsdbBridge(name)
-							}
-						}
+				if table != "Bridge" {
+					continue
+				}
+				for _, row := range tableUpdate.Rows {
+					empty := libovsdb.Row{}
+					if reflect.DeepEqual(row.New, empty) {
+						continue
 					}
+					if _, ok := row.Old.Fields["name"]; !ok {
+						continue
+					}
+					name := row.Old.Fields["name"].(string)
+					ovsdber.createOvsdbBridge(name)
 				}
 			}
 		}

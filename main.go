@@ -1,45 +1,45 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"os"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/codegangsta/cli"
-	"github.com/gopher-net/dknet"
-	"github.com/gopher-net/docker-ovs-plugin/ovs"
+	dknet "github.com/docker/go-plugins-helpers/network"
+	"github.com/iavael/docker-ovs-plugin/ovs"
 )
 
 const (
 	version = "0.2"
 )
 
-func main() {
+var (
+	debug   bool
+	ovsaddr string
+	ovsport int
+)
 
-	var flagDebug = cli.BoolFlag{
-		Name:  "debug, d",
-		Usage: "enable debugging",
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
 	}
-	app := cli.NewApp()
-	app.Name = "don"
-	app.Usage = "Docker Open vSwitch Networking"
-	app.Version = version
-	app.Flags = []cli.Flag{
-		flagDebug,
-	}
-	app.Action = Run
-	app.Run(os.Args)
+	flag.BoolVar(&debug, "debug", false, "enable debugging")
+	flag.StringVar(&ovsaddr, "host", "localhost", "ovsdb address")
+	flag.IntVar(&ovsport, "port", 6640, "ovsdb port")
+	flag.Parse()
 }
 
-// Run initializes the driver
-func Run(ctx *cli.Context) {
-	if ctx.Bool("debug") {
+func main() {
+	if debug {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	d, err := ovs.NewDriver()
+	drv, err := ovs.NewDriver(ovsaddr, ovsport)
 	if err != nil {
 		panic(err)
 	}
-	h := dknet.NewHandler(d)
+	h := dknet.NewHandler(drv)
 	h.ServeUnix("root", "ovs")
 }

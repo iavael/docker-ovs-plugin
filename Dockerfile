@@ -1,7 +1,7 @@
-FROM golang
-RUN apt-get update && apt-get -y install iptables dbus
-RUN go get github.com/tools/godep
-COPY . /go/src/github.com/gopher-net/docker-ovs-plugin
-WORKDIR /go/src/github.com/gopher-net/docker-ovs-plugin
-RUN godep go install -v
+FROM golang:alpine
+COPY . /go/src/github.com/iavael/docker-ovs-plugin
+WORKDIR /go/src/github.com/iavael/docker-ovs-plugin
+RUN apk add --no-cache -t docker-ovs-plugin godep git build-base linux-headers && go get -v && apk del docker-ovs-plugin
+VOLUME /var/run/docker.sock:/var/run/docker.sock
+VOLUME /run/docker/plugins/:/run/docker/plugins/
 ENTRYPOINT ["docker-ovs-plugin"]

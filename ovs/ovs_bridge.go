@@ -3,11 +3,10 @@ package ovs
 import (
 	"errors"
 	"fmt"
-
+	"net"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/docker/libnetwork/iptables"
 	"github.com/socketplane/libovsdb"
 )
 
@@ -31,42 +30,6 @@ func (d *Driver) initBridge(id string) error {
 	if found == false {
 		return fmt.Errorf("Could not find a link for the OVS bridge named %s", bridgeName)
 
-	}
-
-	bridgeMode := d.networks[id].Mode
-	switch bridgeMode {
-	case modeNAT:
-		{
-			gatewayIP := d.networks[id].Gateway + "/" + d.networks[id].GatewayMask
-			if err := setInterfaceIP(bridgeName, gatewayIP); err != nil {
-				log.Debugf("Error assigning address: %s on bridge: %s with an error of: %s", gatewayIP, bridgeName, err)
-			}
-
-			// Validate that the IPAddress is there!
-			_, err := getIfaceAddr(bridgeName)
-			if err != nil {
-				log.Fatalf("No IP address found on bridge %s", bridgeName)
-				return err
-			}
-
-			// Add NAT rules for iptables
-			if err = natOut(gatewayIP); err != nil {
-				log.Fatalf("Could not set NAT rules for bridge %s", bridgeName)
-				return err
-			}
-		}
-
-	case modeFlat:
-		{
-			//ToDo: Add NIC to the bridge
-		}
-	}
-
-	// Bring the bridge up
-	err := interfaceUp(bridgeName)
-	if err != nil {
-		log.Warnf("Error enabling bridge: [ %s ]", err)
-		return err
 	}
 
 	return nil
@@ -223,25 +186,11 @@ func (ovsdber *ovsdber) deleteBridge(bridgeName string) error {
 	return nil
 }
 
-// todo: reconcile with what libnetwork does and port mappings
-func natOut(cidr string) error {
-	masquerade := []string{
-		"POSTROUTING", "-t", "nat",
-		"-s", cidr,
-		"-j", "MASQUERADE",
+func validateIface(ifaceStr string) bool {
+	_, err := net.InterfaceByName(ifaceStr)
+	if err != nil {
+		log.Debugf("The requested interface [ %s ] was not found on the host: %s", ifaceStr, err)
+		return false
 	}
-	if _, err := iptables.Raw(
-		append([]string{"-C"}, masquerade...)...,
-	); err != nil {
-		incl := append([]string{"-I"}, masquerade...)
-		if output, err := iptables.Raw(incl...); err != nil {
-			return err
-		} else if len(output) > 0 {
-			return &iptables.ChainError{
-				Chain:  "POSTROUTING",
-				Output: output,
-			}
-		}
-	}
-	return nil
+	return true
 }

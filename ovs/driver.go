@@ -1,12 +1,13 @@
 package ovs
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/gopher-net/dknet"
+	dknet "github.com/docker/go-plugins-helpers/network"
 	"github.com/samalba/dockerclient"
 	"github.com/socketplane/libovsdb"
 	"github.com/vishvananda/netlink"
@@ -18,24 +19,15 @@ const (
 	bridgePrefix     = "ovsbr-"
 	containerEthName = "eth"
 
-	mtuOption           = "net.gopher.ovs.bridge.mtu"
-	modeOption          = "net.gopher.ovs.bridge.mode"
-	bridgeNameOption    = "net.gopher.ovs.bridge.name"
-	bindInterfaceOption = "net.gopher.ovs.bridge.bind_interface"
+	mtuOption        = "net.gopher.ovs.bridge.mtu"
+	bridgeNameOption = "net.gopher.ovs.bridge.name"
 
-	modeNAT  = "nat"
-	modeFlat = "flat"
-
-	defaultMTU  = 1500
-	defaultMode = modeNAT
+	defaultMTU = 1500
 )
 
-var (
-	validModes = map[string]bool{
-		modeNAT:  true,
-		modeFlat: true,
-	}
-)
+type dockerer struct {
+	client *dockerclient.DockerClient
+}
 
 type Driver struct {
 	dknet.Driver
@@ -48,12 +40,10 @@ type Driver struct {
 // NetworkState is filled in at network creation time
 // it contains state that we wish to keep for each network
 type NetworkState struct {
-	BridgeName        string
-	MTU               int
-	Mode              string
-	Gateway           string
-	GatewayMask       string
-	FlatBindInterface string
+	BridgeName  string
+	MTU         int
+	Gateway     string
+	GatewayMask string
 }
 
 func (d *Driver) CreateNetwork(r *dknet.CreateNetworkRequest) error {
@@ -69,28 +59,16 @@ func (d *Driver) CreateNetwork(r *dknet.CreateNetworkRequest) error {
 		return err
 	}
 
-	mode, err := getBridgeMode(r)
-	if err != nil {
-		return err
-	}
-
 	gateway, mask, err := getGatewayIP(r)
 	if err != nil {
 		return err
 	}
 
-	bindInterface, err := getBindInterface(r)
-	if err != nil {
-		return err
-	}
-
 	ns := &NetworkState{
-		BridgeName:        bridgeName,
-		MTU:               mtu,
-		Mode:              mode,
-		Gateway:           gateway,
-		GatewayMask:       mask,
-		FlatBindInterface: bindInterface,
+		BridgeName:  bridgeName,
+		MTU:         mtu,
+		Gateway:     gateway,
+		GatewayMask: mask,
 	}
 	d.networks[r.NetworkID] = ns
 
@@ -104,7 +82,12 @@ func (d *Driver) CreateNetwork(r *dknet.CreateNetworkRequest) error {
 
 func (d *Driver) DeleteNetwork(r *dknet.DeleteNetworkRequest) error {
 	log.Debugf("Delete network request: %+v", r)
-	bridgeName := d.networks[r.NetworkID].BridgeName
+	var bridgeName string
+	if net, ok := d.networks[r.NetworkID]; ok {
+		bridgeName = net.BridgeName
+	} else {
+		return errors.New("Unknown network")
+	}
 	log.Debugf("Deleting Bridge %s", bridgeName)
 	err := d.deleteBridge(bridgeName)
 	if err != nil {
@@ -115,9 +98,9 @@ func (d *Driver) DeleteNetwork(r *dknet.DeleteNetworkRequest) error {
 	return nil
 }
 
-func (d *Driver) CreateEndpoint(r *dknet.CreateEndpointRequest) error {
+func (d *Driver) CreateEndpoint(r *dknet.CreateEndpointRequest) (*dknet.CreateEndpointResponse, error) {
 	log.Debugf("Create endpoint request: %+v", r)
-	return nil
+	return &dknet.CreateEndpointResponse{Interface: r.Interface}, nil
 }
 
 func (d *Driver) DeleteEndpoint(r *dknet.DeleteEndpointRequest) error {
@@ -183,7 +166,7 @@ func (d *Driver) Leave(r *dknet.LeaveRequest) error {
 	return nil
 }
 
-func NewDriver() (*Driver, error) {
+func NewDriver(ovsaddr string, ovsport int) (*Driver, error) {
 	docker, err := dockerclient.NewDockerClient("unix:///var/run/docker.sock", nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to docker: %s", err)
@@ -193,11 +176,11 @@ func NewDriver() (*Driver, error) {
 	var ovsdb *libovsdb.OvsdbClient
 	retries := 3
 	for i := 0; i < retries; i++ {
-		ovsdb, err = libovsdb.Connect(localhost, ovsdbPort)
+		ovsdb, err = libovsdb.Connect(ovsaddr, ovsport)
 		if err == nil {
 			break
 		}
-		log.Errorf("could not connect to openvswitch on port [ %d ]: %s. Retrying in 5 seconds", ovsdbPort, err)
+		log.Errorf("could not connect to openvswitch on port [ %d ]: %s. Retrying in 5 seconds", ovsport, err)
 		time.Sleep(5 * time.Second)
 	}
 
@@ -244,7 +227,9 @@ func truncateID(id string) string {
 func getBridgeMTU(r *dknet.CreateNetworkRequest) (int, error) {
 	bridgeMTU := defaultMTU
 	if r.Options != nil {
-		if mtu, ok := r.Options[mtuOption].(int); ok {
+		if generic, ok := r.Options["com.docker.network.generic"].(map[string]interface{}); !ok {
+			return bridgeMTU, nil
+		} else if mtu, ok := generic[mtuOption].(int); ok {
 			bridgeMTU = mtu
 		}
 	}
@@ -254,24 +239,13 @@ func getBridgeMTU(r *dknet.CreateNetworkRequest) (int, error) {
 func getBridgeName(r *dknet.CreateNetworkRequest) (string, error) {
 	bridgeName := bridgePrefix + truncateID(r.NetworkID)
 	if r.Options != nil {
-		if name, ok := r.Options[bridgeNameOption].(string); ok {
+		if generic, ok := r.Options["com.docker.network.generic"].(map[string]interface{}); !ok {
+			return bridgeName, nil
+		} else if name, ok := generic[bridgeNameOption].(string); ok {
 			bridgeName = name
 		}
 	}
 	return bridgeName, nil
-}
-
-func getBridgeMode(r *dknet.CreateNetworkRequest) (string, error) {
-	bridgeMode := defaultMode
-	if r.Options != nil {
-		if mode, ok := r.Options[modeOption].(string); ok {
-			if _, isValid := validModes[mode]; !isValid {
-				return "", fmt.Errorf("%s is not a valid mode", mode)
-			}
-			bridgeMode = mode
-		}
-	}
-	return bridgeMode, nil
 }
 
 func getGatewayIP(r *dknet.CreateNetworkRequest) (string, string, error) {
@@ -309,14 +283,4 @@ func getGatewayIP(r *dknet.CreateNetworkRequest) (string, string, error) {
 		return "", "", fmt.Errorf("Cannot split gateway IP address")
 	}
 	return parts[0], parts[1], nil
-}
-
-func getBindInterface(r *dknet.CreateNetworkRequest) (string, error) {
-	if r.Options != nil {
-		if mode, ok := r.Options[bindInterfaceOption].(string); ok {
-			return mode, nil
-		}
-	}
-	// As bind interface is optional and has no default, don't return an error
-	return "", nil
 }
