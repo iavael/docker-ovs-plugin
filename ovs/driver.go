@@ -174,9 +174,9 @@ func (d *Driver) Leave(r *dknet.LeaveRequest) error {
 		}
 		log.Infof("Deleted OVS port [ %s ] from bridge [ %s ]", portID, bridgeName)
 	} else {
-		err = errors.New(fmt.Sprintf("No bridge with id [ %s ] for port [ %s ]", r.NetworkID, portID))
+		err := errors.New(fmt.Sprintf("No bridge with id [ %s ] for port [ %s ]", r.NetworkID, portID))
 		log.Error(err)
-		return nil, err
+		return err
 	}
 	log.Debugf("Leave %s:%s", r.NetworkID, r.EndpointID)
 	return nil
