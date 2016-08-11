@@ -104,7 +104,7 @@ func (d *Driver) DeleteNetwork(r *dknet.DeleteNetworkRequest) error {
 
 func (d *Driver) CreateEndpoint(r *dknet.CreateEndpointRequest) (*dknet.CreateEndpointResponse, error) {
 	log.Debugf("Create endpoint request: %+v", r)
-	return &dknet.CreateEndpointResponse{Interface: r.Interface}, nil
+	return &dknet.CreateEndpointResponse{Interface: &dknet.EndpointInterface{}}, nil
 }
 
 func (d *Driver) DeleteEndpoint(r *dknet.DeleteEndpointRequest) error {
@@ -132,13 +132,19 @@ func (d *Driver) Join(r *dknet.JoinRequest) (*dknet.JoinResponse, error) {
 		log.Warnf("Error enabling  Veth local iface: [ %v ]", localVethPair)
 		return nil, err
 	}
-	bridgeName := d.networks[r.NetworkID].BridgeName
-	err = d.addOvsVethPort(bridgeName, localVethPair.Name, 0)
-	if err != nil {
-		log.Errorf("error attaching veth [ %s ] to bridge [ %s ]", localVethPair.Name, bridgeName)
+	if val, ok := d.networks[r.NetworkID]; ok {
+		bridgeName := val.BridgeName
+		err = d.addOvsVethPort(bridgeName, localVethPair.Name, 0)
+		if err != nil {
+			log.Errorf("error attaching veth [ %s ] to bridge [ %s ]", localVethPair.Name, bridgeName)
+			return nil, err
+		}
+		log.Infof("Attached veth [ %s ] to bridge [ %s ]", localVethPair.Name, bridgeName)
+	} else {
+		err = errors.New(fmt.Sprintf("No bridge with id [ %s ] for veth [ %s ]", r.NetworkID, localVethPair.Name))
+		log.Error(err)
 		return nil, err
 	}
-	log.Infof("Attached veth [ %s ] to bridge [ %s ]", localVethPair.Name, bridgeName)
 
 	// SrcName gets renamed to DstPrefix + ID on the container iface
 	res := &dknet.JoinResponse{
@@ -159,13 +165,19 @@ func (d *Driver) Leave(r *dknet.LeaveRequest) error {
 		log.Errorf("unable to delete veth on leave: %s", err)
 	}
 	portID := fmt.Sprintf(ovsPortPrefix + truncateID(r.EndpointID))
-	bridgeName := d.networks[r.NetworkID].BridgeName
-	err := d.ovsdber.deletePort(bridgeName, portID)
-	if err != nil {
-		log.Errorf("OVS port [ %s ] delete transaction failed on bridge [ %s ] due to: %s", portID, bridgeName, err)
-		return err
+	if val, ok := d.networks[r.NetworkID]; ok {
+		bridgeName := val.BridgeName
+		err := d.ovsdber.deletePort(bridgeName, portID)
+		if err != nil {
+			log.Errorf("OVS port [ %s ] delete transaction failed on bridge [ %s ] due to: %s", portID, bridgeName, err)
+			return err
+		}
+		log.Infof("Deleted OVS port [ %s ] from bridge [ %s ]", portID, bridgeName)
+	} else {
+		err = errors.New(fmt.Sprintf("No bridge with id [ %s ] for port [ %s ]", r.NetworkID, portID))
+		log.Error(err)
+		return nil, err
 	}
-	log.Infof("Deleted OVS port [ %s ] from bridge [ %s ]", portID, bridgeName)
 	log.Debugf("Leave %s:%s", r.NetworkID, r.EndpointID)
 	return nil
 }
