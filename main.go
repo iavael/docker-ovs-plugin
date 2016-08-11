@@ -15,9 +15,9 @@ const (
 )
 
 var (
-	debug   bool
-	ovsaddr string
-	ovsport int
+	debug  bool
+	proto  string
+	target string
 )
 
 func init() {
@@ -26,8 +26,8 @@ func init() {
 		flag.PrintDefaults()
 	}
 	flag.BoolVar(&debug, "debug", false, "enable debugging")
-	flag.StringVar(&ovsaddr, "host", "localhost", "ovsdb address")
-	flag.IntVar(&ovsport, "port", 6640, "ovsdb port")
+	flag.StringVar(&proto, "proto", "tcp", "ovsdb protocol")
+	flag.StringVar(&target, "target", "localhost:6640", "ovsdb target")
 	flag.Parse()
 }
 
@@ -36,7 +36,7 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	drv, err := ovs.NewDriver(ovsaddr, ovsport)
+	drv, err := ovs.NewDriver(proto, target)
 	if err != nil {
 		panic(err)
 	}

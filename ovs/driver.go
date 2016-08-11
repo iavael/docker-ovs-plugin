@@ -46,6 +46,10 @@ type NetworkState struct {
 	GatewayMask string
 }
 
+func (d *Driver) GetCapabilities() (*dknet.CapabilitiesResponse, error) {
+	return &dknet.CapabilitiesResponse{Scope: "local"}, nil
+}
+
 func (d *Driver) CreateNetwork(r *dknet.CreateNetworkRequest) error {
 	log.Debugf("Create network request: %+v", r)
 
@@ -166,7 +170,7 @@ func (d *Driver) Leave(r *dknet.LeaveRequest) error {
 	return nil
 }
 
-func NewDriver(ovsaddr string, ovsport int) (*Driver, error) {
+func NewDriver(protocol string, target string) (*Driver, error) {
 	docker, err := dockerclient.NewDockerClient("unix:///var/run/docker.sock", nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to docker: %s", err)
@@ -176,11 +180,11 @@ func NewDriver(ovsaddr string, ovsport int) (*Driver, error) {
 	var ovsdb *libovsdb.OvsdbClient
 	retries := 3
 	for i := 0; i < retries; i++ {
-		ovsdb, err = libovsdb.Connect(ovsaddr, ovsport)
+		ovsdb, err = libovsdb.ConnectUsingProtocol(protocol, target)
 		if err == nil {
 			break
 		}
-		log.Errorf("could not connect to openvswitch on port [ %d ]: %s. Retrying in 5 seconds", ovsport, err)
+		log.Errorf("could not connect to openvswitch on [ %s ]: %s. Retrying in 5 seconds", target, err)
 		time.Sleep(5 * time.Second)
 	}
 
