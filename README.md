@@ -18,7 +18,7 @@ $ docker run -d --net=host --privileged iavael/docker-ovs-plugin
 **4.** Now you are ready to create a new network
 
 ```sh
-$ docker network create -d ovs openvswitch
+$ docker network create -d ovs --gateway=172.19.0.1 --subnet=172.19.0.0/24 -o net.gopher.ovs.bridge.name=docker1 openvswitch
 ```
 
 **6.** Test it out!
