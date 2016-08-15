@@ -1,0 +1,42 @@
+define(VERSION, 0.0.0)dnl
+define(GITREF, `v'VERSION)dnl
+%global gitref	GITREF
+
+Name:			docker-ovs-plugin
+Version:		VERSION
+Release:		0%{?dist}
+Summary:		OpenVSwitch plugin for docker
+License:		GPL3+
+URL:			https://github.com/iavael/docker-ovs-plugin
+Source0:		https://github.com/iavael/%{name}/archive/%{gitref}.tar.gz
+Source1:		%{name}.service
+
+BuildRequires:	golang >= 1.6
+
+# pull in golang libraries by explicit import path, inside the meta golang()
+# BuildRequires:	golang(github.com/Sirupsen/logrus)
+# BuildRequires:	golang(github.com/docker/go-plugins-helpers)
+# BuildRequires:	golang(github.com/samalba/dockerclient)
+# BuildRequires:	golang(github.com/socketplane/libovsdb)
+# BuildRequires:	golang(github.com/vishvananda/netlink)
+# BuildRequires:	golang(github.com/vishvananda/netlink)
+
+%description
+
+%prep
+%setup -q -n %{name}-%{gitref}
+
+%build
+unset GOPATH
+%gobuild
+
+%install
+install -d %{buildroot}%{_bindir} %{buildroot}%{_unitdir}
+install -p -m 0755 %{name}-%{gitref} %{buildroot}%{_bindir}/%{name}
+install -p -m 0644 %{SOURCE1} %{buildroot}%{_unitdir}/%{name}.service
+
+%files
+%{_bindir}/%{name}
+%{_unitdir}/%{name}.service
+
+%changelog

@@ -1,0 +1,17 @@
+define(BINDIR, /usr/bin)dnl
+[Unit]
+Description=Docker OVS plugin
+After= local-fs.target network.target
+
+[Service]
+Type=simple
+ExecStart=BINDIR/docker-ovs-plugin -proto unix -target /var/run/openvswitch/db.sock
+WorkingDirectory=/var/lib/docker
+Restart=on-failure
+RestartSec=10s
+PrivateTmp=yes
+ProtectSystem="full"
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

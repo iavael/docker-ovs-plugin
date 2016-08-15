@@ -27,4 +27,6 @@ _testmain.go
 .idea
 plugin
 
-docker-ovs-plugin
+/docker-ovs-plugin
+/docker-ovs-plugin.spec
+/docker-ovs-plugin.service
