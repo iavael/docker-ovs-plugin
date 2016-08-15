@@ -24,8 +24,9 @@ mkdir -p $(rpm -D "_topdir ${RPMDIR}" --eval "%{_srcrpmdir}")
 mkdir -p $(rpm -D "_topdir ${RPMDIR}" --eval "%{_builddir}")
 
 cp docker-ovs-plugin.service $(rpm -D "_topdir ${RPMDIR}" --eval "%{_sourcedir}")/
-git submodule update --init --recursive
-git archive --prefix=docker-ovs-plugin-${GITREF}/ --format=tar.gz -o $RPMDIR/SOURCES/${GITREF}.tar.gz HEAD
+# git submodule update --init --recursive
+tar czpf $RPMDIR/SOURCES/${GITREF}.tar.gz --show-transformed --transform="s|./|./docker-ovs-plugin-${GITREF}/|" ./
 rpmbuild -D "_topdir ${RPMDIR}" -ba docker-ovs-plugin.spec
+cp -a $(rpm -D "_topdir ${RPMDIR}" --eval "%{_rpmdir}") $(rpm -D "_topdir ${RPMDIR}" --eval "%{_srcrpmdir}") ./
 
 _exit

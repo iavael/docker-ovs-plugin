@@ -7,11 +7,11 @@ Version:		VERSION
 Release:		0%{?dist}
 Summary:		OpenVSwitch plugin for docker
 License:		GPL3+
-URL:			https://github.com/iavael/docker-ovs-plugin
+URL:			https://github.com/iavael/%{name}
 Source0:		https://github.com/iavael/%{name}/archive/%{gitref}.tar.gz
 Source1:		%{name}.service
 
-BuildRequires:	golang >= 1.6
+BuildRequires:	golang >= 1.6, git
 
 # pull in golang libraries by explicit import path, inside the meta golang()
 # BuildRequires:	golang(github.com/Sirupsen/logrus)
@@ -27,7 +27,11 @@ BuildRequires:	golang >= 1.6
 %setup -q -n %{name}-%{gitref}
 
 %build
-unset GOPATH
+mkdir -p ./_build/src/github.com/iavael/
+ln -s $(pwd) ./_build/src/github.com/iavael/%{name}
+
+export GOPATH=$(pwd)/_build
+go get -d
 %gobuild
 
 %install
