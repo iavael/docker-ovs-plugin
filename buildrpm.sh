@@ -9,6 +9,7 @@ fi
 
 declare -r RPMDIR=$(mktemp -d)
 declare -r GITREF=$(git show-ref --hash HEAD)
+
 _exit() {
   if [ -n "${RPMDIR}" ]; then
     rm -fr "${RPMDIR}"
